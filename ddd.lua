@@ -1007,7 +1007,8 @@ end
 local player = game.Players.LocalPlayer
 local gui = Instance.new("ScreenGui")
 gui.Name = "NeonScriptHub"
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.ResetOnSpawn = false
+gui.Parent = player.PlayerGui
 
 local frame = Instance.new("Frame")
 frame.Parent = gui
