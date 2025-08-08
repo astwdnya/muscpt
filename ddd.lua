@@ -1,564 +1,1085 @@
--- Devon Loader UI Only
--- Extracted UI components for Devon Loader
+-- Aimbot Script with GUI
+-- Automatically aims at players with customizable settings
 
-if DL_LOADED and not _G.DL_DEBUG == true then
-    return
-end
+-- Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
 
-pcall(function() getgenv().DL_LOADED = true end)
-if not game:IsLoaded() then game.Loaded:Wait() end
-
--- Function and service definitions
-function missing(t, f, fallback)
-    if type(f) == t then return f end
-    return fallback or nil
-end
-
-cloneref = missing("function", cloneref, function(...) return ... end)
-sethidden = missing("function", sethiddenproperty or set_hidden_property or set_hidden_prop)
-gethidden = missing("function", gethiddenproperty or get_hidden_property or get_hidden_prop)
-queueteleport = missing("function", queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport))
-httprequest = missing("function", request or http_request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request))
-everyClipboard = missing("function", setclipboard or toclipboard or set_clipboard or (Clipboard and Clipboard.set))
-firetouchinterest = missing("function", firetouchinterest)
-waxwritefile, waxreadfile = writefile, readfile
-writefile = missing("function", waxwritefile) and function(file, data, safe)
-    if safe == true then return pcall(waxwritefile, file, data) end
-    waxwritefile(file, data)
-end
-readfile = missing("function", waxreadfile) and function(file, safe)
-    if safe == true then return pcall(waxreadfile, file) end
-    return waxreadfile(file)
-end
-isfile = missing("function", isfile, readfile and function(file)
-    local success, result = pcall(function()
-        return readfile(file)
-    end)
-    return success and result ~= nil and result ~= ""
-end)
-makefolder = missing("function", makefolder)
-isfolder = missing("function", isfolder)
-waxgetcustomasset = missing("function", getcustomasset or getsynasset)
-hookfunction = missing("function", hookfunction)
-hookmetamethod = missing("function", hookmetamethod)
-getnamecallmethod = missing("function", getnamecallmethod or get_namecall_method)
-checkcaller = missing("function", checkcaller, function() return false end)
-newcclosure = missing("function", newcclosure)
-getgc = missing("function", getgc or get_gc_objects)
-setthreadidentity = missing("function", setthreadidentity or (syn and syn.set_thread_identity) or syn_context_set or setthreadcontext)
-replicatesignal = missing("function", replicatesignal)
-
-COREGUI = cloneref(game:GetService("CoreGui"))
-Players = cloneref(game:GetService("Players"))
-UserInputService = cloneref(game:GetService("UserInputService"))
-TweenService = cloneref(game:GetService("TweenService"))
-HttpService = cloneref(game:GetService("HttpService"))
-MarketplaceService = cloneref(game:GetService("MarketplaceService"))
-RunService = cloneref(game:GetService("RunService"))
-TeleportService = cloneref(game:GetService("TeleportService"))
-StarterGui = cloneref(game:GetService("StarterGui"))
-GuiService = cloneref(game:GetService("GuiService"))
-Lighting = cloneref(game:GetService("Lighting"))
-ContextActionService = cloneref(game:GetService("ContextActionService"))
-ReplicatedStorage = cloneref(game:GetService("ReplicatedStorage"))
-GroupService = cloneref(game:GetService("GroupService"))
-PathService = cloneref(game:GetService("PathfindingService"))
-SoundService = cloneref(game:GetService("SoundService"))
-Teams = cloneref(game:GetService("Teams"))
-StarterPlayer = cloneref(game:GetService("StarterPlayer"))
-InsertService = cloneref(game:GetService("InsertService"))
-ChatService = cloneref(game:GetService("Chat"))
-ProximityPromptService = cloneref(game:GetService("ProximityPromptService"))
-ContentProvider = cloneref(game:GetService("ContentProvider"))
-StatsService = cloneref(game:GetService("Stats"))
-MaterialService = cloneref(game:GetService("MaterialService"))
-AvatarEditorService = cloneref(game:GetService("AvatarEditorService"))
-TextService = cloneref(game:GetService("TextService"))
-TextChatService = cloneref(game:GetService("TextChatService"))
-CaptureService = cloneref(game:GetService("CaptureService"))
-
-Player = cloneref(Players.LocalPlayer)
-PlayerGui = cloneref(Players.LocalPlayer:FindFirstChildWhichIsA("PlayerGui"))
-PlaceId, JobId = game.PlaceId, game.JobId
-IsOnMobile = table.find({Enum.Platform.Android, Enum.Platform.IOS}, UserInputService:GetPlatform())
-
-isLegacyChat = TextChatService.ChatVersion == Enum.ChatVersion.LegacyChatService
-
--- Asset handling for UI
-local dlassets = {
-    ["devonloader/assets/bindsandplugins.png"] = "rbxassetid://5147695474",
-    ["devonloader/assets/close.png"] = "rbxassetid://3926305904",
-    ["devonloader/assets/drag.png"] = "rbxassetid://5144775406",
-    ["devonloader/assets/logo.png"] = "rbxassetid://4934506955",
-    ["devonloader/assets/minimize.png"] = "rbxassetid://5147694186",
-    ["devonloader/assets/open.png"] = "rbxassetid://5147694186",
-    ["devonloader/assets/pin_off.png"] = "rbxassetid://5147695474",
-    ["devonloader/assets/pin_on.png"] = "rbxassetid://5147695474",
-    ["devonloader/assets/reference.png"] = "rbxassetid://5147695474",
-    ["devonloader/assets/resize.png"] = "rbxassetid://5144775406"
+-- Variables
+local aimbotEnabled = false
+local targetPlayer = nil
+local selectedPlayers = {} -- Store selected players
+local currentTab = "settings" -- Current active tab
+local noRecoilEnabled = false -- No recoil feature
+local aimbotSettings = {
+    fov = 100, -- Field of view
+    smoothness = 1, -- Aim smoothness (1 = instant, higher = smoother)
+    aimPart = "Head", -- Part to aim at (Head, Torso, etc.)
+    teamCheck = false, -- Don't aim at teammates
+    visibilityCheck = true, -- Only aim at visible players
+    triggerKey = Enum.KeyCode.RightShift -- Key to hold for aimbot
 }
 
-function getcustomasset(asset)
-    if dlassets[asset] then
-        if waxgetcustomasset then
-            local success, result = pcall(function()
-                return waxgetcustomasset(asset)
-            end)
-            if success and result ~= nil and result ~= "" then
-                return result
+-- FOV Circle GUI
+local fovCircleGui = Instance.new("ScreenGui")
+fovCircleGui.Name = "FOVCircleGUI"
+fovCircleGui.Parent = game.CoreGui
+
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, aimbotSettings.fov * 2, 0, aimbotSettings.fov * 2)
+fovCircle.Position = UDim2.new(0.5, -aimbotSettings.fov, 0.5, -aimbotSettings.fov)
+fovCircle.BackgroundTransparency = 1
+fovCircle.BorderSizePixel = 0
+fovCircle.Parent = fovCircleGui
+
+-- Create circle using ImageLabel with a circle image
+local circleImage = Instance.new("ImageLabel")
+circleImage.Name = "CircleImage"
+circleImage.Size = UDim2.new(1, 0, 1, 0)
+circleImage.Position = UDim2.new(0, 0, 0, 0)
+circleImage.BackgroundTransparency = 1
+circleImage.Image = "rbxasset://textures/whiteCircle.png"
+circleImage.ImageTransparency = 0.8
+circleImage.ImageColor3 = Color3.fromRGB(100, 200, 255)
+circleImage.Parent = fovCircle
+
+-- Add stroke effect
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(150, 220, 255)
+stroke.Thickness = 2
+stroke.Transparency = 0.3
+stroke.Parent = circleImage
+
+-- Function to update FOV circle
+local function updateFOVCircle()
+    local newSize = aimbotSettings.fov * 2
+    fovCircle.Size = UDim2.new(0, newSize, 0, newSize)
+    fovCircle.Position = UDim2.new(0.5, -aimbotSettings.fov, 0.5, -aimbotSettings.fov)
+    
+    -- Change color based on aimbot state
+    if aimbotEnabled then
+        circleImage.ImageColor3 = Color3.fromRGB(100, 255, 100) -- Green when enabled
+        stroke.Color = Color3.fromRGB(150, 255, 150)
+    else
+        circleImage.ImageColor3 = Color3.fromRGB(100, 200, 255) -- Blue when disabled
+        stroke.Color = Color3.fromRGB(150, 220, 255)
+    end
+end
+
+-- Initially hide the circle
+fovCircle.Visible = false
+
+-- No Recoil Function
+local function removeRecoil()
+    if not noRecoilEnabled then return end
+    
+    -- Get the player's character and tools
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    -- Check if player has a tool (weapon)
+    local tool = character:FindFirstChildOfClass("Tool")
+    if not tool then return end
+    
+    -- Arsenal specific recoil removal
+    -- Arsenal uses a module called "Recoil" in the tool
+    local recoilModule = tool:FindFirstChild("Recoil")
+    if recoilModule then
+        -- Disable recoil by setting values to 0
+        for _, child in pairs(recoilModule:GetChildren()) do
+            if child:IsA("NumberValue") then
+                child.Value = 0
+            elseif child:IsA("Vector3Value") then
+                child.Value = Vector3.new(0, 0, 0)
             end
         end
     end
-    return dlassets[asset]
-end
-
--- UI Setup
-local currentVersion = "5.9.3"
-
--- Instance creation for UI elements
-local DevonLoader = Instance.new("ScreenGui")
-local Holder = Instance.new("Frame")
-local Title = Instance.new("TextLabel")
-local Dark = Instance.new("Frame")
-local Cmdbar = Instance.new("TextBox")
-local CMDsF = Instance.new("ScrollingFrame")
-local listlayout = Instance.new("UIListLayout")
-local ReferenceButton = Instance.new("ImageButton")
-local ColorsButton = Instance.new("ImageButton")
-local Settings = Instance.new("Frame")
-local Prefix = Instance.new("TextLabel")
-local PrefixBox = Instance.new("TextBox")
-local Keybinds = Instance.new("TextLabel")
-local StayOpen = Instance.new("TextLabel")
-local Button = Instance.new("Frame")
-local On = Instance.new("TextButton")
-local Positions = Instance.new("TextLabel")
-local EventBind = Instance.new("TextLabel")
-local Plugins = Instance.new("TextLabel")
-local Example = Instance.new("TextButton")
-local Notification = Instance.new("Frame")
-local Title_2 = Instance.new("TextLabel")
-local Text = Instance.new("TextLabel")
-local shadow = Instance.new("Frame")
-local PopupText = Instance.new("TextLabel")
-local Exit = Instance.new("TextButton")
-local ExitImage = Instance.new("ImageLabel")
-local IntroBackground = Instance.new("Frame")
-local Logo = Instance.new("ImageLabel")
-local Credits = Instance.new("TextLabel")
-local MinimizedBar = Instance.new("Frame")
-local Open = Instance.new("TextButton")
-local Drag = Instance.new("ImageLabel")
-local Dark_3 = Instance.new("Frame")
-local ResizeIcon = Instance.new("ImageButton")
-local background_2 = Instance.new("Frame")
-local Colors = Instance.new("Frame")
-local Exit_2 = Instance.new("TextButton")
-local ExitImage_2 = Instance.new("ImageLabel")
-local Shade1 = Instance.new("TextLabel")
-local Color1 = Instance.new("TextBox")
-local Shade2 = Instance.new("TextLabel")
-local Color2 = Instance.new("TextBox")
-local Shade3 = Instance.new("TextLabel")
-local Color3 = Instance.new("TextBox")
-local Text1 = Instance.new("TextLabel")
-local Color4 = Instance.new("TextBox")
-local Text2 = Instance.new("TextLabel")
-local Color5 = Instance.new("TextBox")
-local Save = Instance.new("TextButton")
-local Scroll = Instance.new("ScrollingFrame")
-local Scroll_2 = Instance.new("ScrollingFrame")
-local CmdInfo = Instance.new("Frame")
-local CmdName = Instance.new("TextLabel")
-local CmdDesc = Instance.new("TextLabel")
-local CopyCmd = Instance.new("TextButton")
-local AddAlias = Instance.new("TextButton")
-local AliasList = Instance.new("ScrollingFrame")
-local RemoveAlias = Instance.new("TextButton")
-local Waypoints = Instance.new("Frame")
-local background = Instance.new("Frame")
-local Save_2 = Instance.new("TextButton")
-local WayName = Instance.new("TextBox")
-local Add = Instance.new("TextButton")
-local scroll = Instance.new("ScrollingFrame")
-local Delete = Instance.new("TextButton")
-local Goto = Instance.new("TextButton")
-local Directions = Instance.new("TextLabel")
-local KeybindEditor = Instance.new("Frame")
-local background_4 = Instance.new("Frame")
-local Save_3 = Instance.new("TextButton")
-local BindCmd = Instance.new("TextBox")
-local BindKey = Instance.new("TextBox")
-local Add_2 = Instance.new("TextButton")
-local Toggles = Instance.new("ScrollingFrame")
-local ClickTP = Instance.new("TextLabel")
-local Select = Instance.new("TextButton")
-local ClickDelete = Instance.new("TextLabel")
-local Select_2 = Instance.new("TextButton")
-local Cmdbar_2 = Instance.new("TextBox")
-local Cmdbar_3 = Instance.new("TextBox")
-local CreateToggle = Instance.new("TextLabel")
-local Button_2 = Instance.new("Frame")
-local On_2 = Instance.new("TextButton")
-local shadow_2 = Instance.new("Frame")
-local PopupText_2 = Instance.new("TextLabel")
-local Exit_3 = Instance.new("TextButton")
-local ExitImage_3 = Instance.new("ImageLabel")
-local AliasHint = Instance.new("TextLabel")
-local PluginEditor = Instance.new("Frame")
-local background_3 = Instance.new("Frame")
-local Dark_2 = Instance.new("Frame")
-local Img = Instance.new("ImageButton")
-local AddPlugin = Instance.new("TextButton")
-local FileName = Instance.new("TextBox")
-local About = Instance.new("TextLabel")
-local Directions_2 = Instance.new("TextLabel")
-local shadow_3 = Instance.new("Frame")
-local PopupText_3 = Instance.new("TextLabel")
-local Exit_4 = Instance.new("TextButton")
-local ExitImage_4 = Instance.new("ImageLabel")
-local Logs = Instance.new("Frame")
-local background_5 = Instance.new("Frame")
-local Toggle_2 = Instance.new("TextButton")
-local Clear_2 = Instance.new("TextButton")
-local scroll_3 = Instance.new("ScrollingFrame")
-local listlayout_2 = Instance.new("UIListLayout")
-local selectChat = Instance.new("TextButton")
-local selectJoin = Instance.new("TextButton")
-
--- UI Setup and Styling
-DevonLoader.Name = "DevonLoader"
-DevonLoader.Parent = COREGUI
-DevonLoader.Enabled = false
-DevonLoader.DisplayOrder = 100
-DevonLoader.ResetOnSpawn = false
-
-local shade1 = {}
-local shade2 = {}
-local shade3 = {}
-local text1 = {}
-local text2 = {}
-local scrollcol = {}
-local button = {}
-local currentShade1 = Color3.fromRGB(36, 36, 37)
-local currentShade2 = Color3.fromRGB(26, 26, 27)
-local currentShade3 = Color3.fromRGB(46, 46, 47)
-local currentText1 = Color3.fromRGB(242, 243, 243)
-local currentText2 = Color3.fromRGB(200, 200, 200)
-local currentScroll = Color3.fromRGB(40, 40, 41)
-local currentButton = Color3.fromRGB(50, 50, 51)
-
-function Darken(Color)
-    local H, S, V = Color:ToHSV()
-    V = math.clamp(V - 0.03, 0, 1)
-    return Color3.fromHSV(H, S, V)
-end
-function Lighten(Color)
-    local H, S, V = Color:ToHSV()
-    V = math.clamp(V + 0.03, 0, 1)
-    return Color3.fromHSV(H, S, V)
-end
-
-function applyTheme()
-    for i, v in ipairs(shade1) do
-        v.BackgroundColor3 = currentShade1
-    end
-    for i, v in ipairs(shade2) do
-        v.BackgroundColor3 = currentShade2
-    end
-    for i, v in ipairs(shade3) do
-        v.BackgroundColor3 = currentShade3
-    end
-    for i, v in ipairs(text1) do
-        v.TextColor3 = currentText1
-    end
-    for i, v in ipairs(text2) do
-        v.TextColor3 = currentText2
-    end
-    for i, v in ipairs(scrollcol) do
-        v.ScrollBarImageColor3 = currentScroll
-    end
-    for i, v in ipairs(button) do
-        v.BackgroundColor3 = currentButton
-    end
-end
-
-function loadTheme()
-    local themeData = readfile and isfile and isfile("DLthemes.txt") and readfile("DLthemes.txt")
-    if themeData then
-        local success, result = pcall(function()
-            local data = HttpService:JSONDecode(themeData)
-            currentShade1 = Color3.fromHex(data.Shade1 or "#242425")
-            currentShade2 = Color3.fromHex(data.Shade2 or "#1A1A1B")
-            currentShade3 = Color3.fromHex(data.Shade3 or "#2E2E2F")
-            currentText1 = Color3.fromHex(data.Text1 or "#F2F3F3")
-            currentText2 = Color3.fromHex(data.Text2 or "#C8C8C8")
-            currentScroll = Color3.fromHex(data.Scroll or "#282829")
-            currentButton = Color3.fromHex(data.Button or "#323233")
-        end)
-        if success and result then
-            applyTheme()
+    
+    -- Alternative method: Hook into the tool's events
+    local toolScript = tool:FindFirstChild("LocalScript")
+    if toolScript then
+        -- Try to disable recoil by modifying the script
+        local scriptSource = toolScript.Source
+        if scriptSource then
+            -- Replace recoil-related code
+            scriptSource = scriptSource:gsub("recoil", "0")
+            scriptSource = scriptSource:gsub("Recoil", "0")
         end
     end
-end
-if readfile and isfile then
-    pcall(loadTheme)
-end
-
-function randomString()
-    local length = math.random(10, 20)
-    local array = {}
-    for i = 1, length do
-        array[i] = string.char(math.random(32, 126))
-    end
-    return table.concat(array)
-end
-
-PARENT = nil
-if get_hidden_gui or gethui then
-    local hiddenUI = get_hidden_gui or gethui
-    local success, result = pcall(hiddenUI)
-    if success then
-        PARENT = result
-    end
-end
-if not PARENT then
-    if COREGUI:FindFirstChild("RobloxGui") then
-        PARENT = COREGUI.RobloxGui
-    else
-        PARENT = COREGUI
+    
+    -- General recoil removal for any game
+    -- Hook into camera shake events
+    local camera = workspace.CurrentCamera
+    if camera then
+        -- Remove any camera shake
+        camera.CameraSubject = humanoid
+        camera.CameraType = Enum.CameraType.Custom
     end
 end
 
-local ScaledHolder = Instance.new("Frame")
-ScaledHolder.Name = randomString()
-ScaledHolder.Parent = DevonLoader
-ScaledHolder.BackgroundTransparency = 1
-ScaledHolder.Size = UDim2.new(1, 0, 1, 0)
+-- Create GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AimbotGUI"
+screenGui.Parent = game.CoreGui
 
-Holder.Name = "Holder"
-Holder.Parent = ScaledHolder
-Holder.Active = true
-Holder.BackgroundColor3 = Color3.fromRGB(26, 26, 27)
-Holder.BackgroundTransparency = 1
-Holder.BorderSizePixel = 0
-Holder.Position = UDim2.new(1, -250, 1, -220)
-Holder.Size = UDim2.new(0, 250, 0, 220)
-Holder.ZIndex = 10
-table.insert(shade2, Holder)
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 420, 0, 450) -- Increased size for better visibility
+frame.Position = UDim2.new(0, 10, 1, -460) -- Adjusted position
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
 
-Title.Name = "Title"
-Title.Parent = Holder
-Title.Active = true
-Title.BackgroundColor3 = Color3.fromRGB(36, 36, 37)
-Title.BorderSizePixel = 0
-Title.Size = UDim2.new(0, 250, 0, 20)
-Title.Font = Enum.Font.SourceSans
-Title.TextSize = 18
-Title.Text = "Devon Loader v" .. currentVersion
-table.insert(shade1, Title)
+-- Add rounded corners effect
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = frame
 
--- CTRL Click Teleport Script
---[[local Plr = game:GetService("Players").LocalPlayer
-local Mouse = Plr:GetMouse()
- 
-Mouse.Button1Down:connect(function()
-if not game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftControl) then return end
-if not Mouse.Target then return end
-Plr.Character:MoveTo(Mouse.Hit.p)
+-- Add subtle border
+local border = Instance.new("Frame")
+border.Name = "Border"
+border.Size = UDim2.new(1, 0, 1, 0)
+border.Position = UDim2.new(0, 0, 0, 0)
+border.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
+border.BorderSizePixel = 0
+border.Parent = frame
+
+local borderCorner = Instance.new("UICorner")
+borderCorner.CornerRadius = UDim.new(0, 12)
+borderCorner.Parent = border
+
+local innerFrame = Instance.new("Frame")
+innerFrame.Name = "InnerFrame"
+innerFrame.Size = UDim2.new(1, -4, 1, -4)
+innerFrame.Position = UDim2.new(0, 2, 0, 2)
+innerFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+innerFrame.BorderSizePixel = 0
+innerFrame.Parent = frame
+
+local innerCorner = Instance.new("UICorner")
+innerCorner.CornerRadius = UDim.new(0, 10)
+innerCorner.Parent = innerFrame
+
+-- Make frame draggable
+local dragging = false
+local dragInput, dragStart, startPos
+
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
 end)
---]]
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        updateInput(input)
+    end
+end)
+
+-- Title with gradient
+local title = Instance.new("Frame")
+title.Name = "Title"
+title.Size = UDim2.new(1, 0, 0, 40)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+title.BorderSizePixel = 0
+title.Parent = innerFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = title
+
+local titleText = Instance.new("TextLabel")
+titleText.Name = "TitleText"
+titleText.Size = UDim2.new(1, -60, 1, 0)
+titleText.Position = UDim2.new(0, 15, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "🎯 Aimbot Settings"
+titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleText.TextScaled = true
+titleText.Font = Enum.Font.GothamBold
+titleText.Parent = title
+
+-- Close button (X) with better design
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseButton"
+closeButton.Size = UDim2.new(0, 30, 0, 30)
+closeButton.Position = UDim2.new(1, -35, 0, 5)
+closeButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+closeButton.BorderSizePixel = 0
+closeButton.Text = "✕"
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.TextScaled = true
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Parent = title
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.Parent = closeButton
+
+closeButton.MouseEnter:Connect(function()
+    closeButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+end)
+
+closeButton.MouseLeave:Connect(function()
+    closeButton.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+    fovCircleGui:Destroy()
+end)
+
+-- Tab System
+local tabFrame = Instance.new("Frame")
+tabFrame.Name = "TabFrame"
+tabFrame.Size = UDim2.new(1, 0, 0, 35)
+tabFrame.Position = UDim2.new(0, 0, 0, 45)
+tabFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+tabFrame.BorderSizePixel = 0
+tabFrame.Parent = innerFrame
+
+local tabCorner = Instance.new("UICorner")
+tabCorner.CornerRadius = UDim.new(0, 8)
+tabCorner.Parent = tabFrame
+
+-- Settings Tab Button
+local settingsTabButton = Instance.new("TextButton")
+settingsTabButton.Name = "SettingsTabButton"
+settingsTabButton.Size = UDim2.new(0.5, -5, 1, -10)
+settingsTabButton.Position = UDim2.new(0, 5, 0, 5)
+settingsTabButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+settingsTabButton.BorderSizePixel = 0
+settingsTabButton.Text = "⚙️ Settings"
+settingsTabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+settingsTabButton.TextScaled = true
+settingsTabButton.Font = Enum.Font.Gotham
+settingsTabButton.Parent = tabFrame
+
+local settingsTabCorner = Instance.new("UICorner")
+settingsTabCorner.CornerRadius = UDim.new(0, 6)
+settingsTabCorner.Parent = settingsTabButton
+
+-- Players Tab Button
+local playersTabButton = Instance.new("TextButton")
+playersTabButton.Name = "PlayersTabButton"
+playersTabButton.Size = UDim2.new(0.5, -5, 1, -10)
+playersTabButton.Position = UDim2.new(0.5, 0, 0, 5)
+playersTabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+playersTabButton.BorderSizePixel = 0
+playersTabButton.Text = "👥 Players"
+playersTabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+playersTabButton.TextScaled = true
+playersTabButton.Font = Enum.Font.Gotham
+playersTabButton.Parent = tabFrame
+
+local playersTabCorner = Instance.new("UICorner")
+playersTabCorner.CornerRadius = UDim.new(0, 6)
+playersTabCorner.Parent = playersTabButton
+
+-- Content Frames
+local settingsContent = Instance.new("Frame")
+settingsContent.Name = "SettingsContent"
+settingsContent.Size = UDim2.new(1, -20, 1, -100) -- Increased height
+settingsContent.Position = UDim2.new(0, 10, 0, 95) -- Adjusted position
+settingsContent.BackgroundTransparency = 1
+settingsContent.Parent = innerFrame
+
+local playersContent = Instance.new("Frame")
+playersContent.Name = "PlayersContent"
+playersContent.Size = UDim2.new(1, -20, 1, -100) -- Increased height
+playersContent.Position = UDim2.new(0, 10, 0, 95) -- Adjusted position
+playersContent.BackgroundTransparency = 1
+playersContent.Visible = false
+playersContent.Parent = innerFrame
+
+-- Function to switch tabs
+local function switchTab(tabName)
+    currentTab = tabName
+    
+    if tabName == "settings" then
+        settingsContent.Visible = true
+        playersContent.Visible = false
+        settingsTabButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        settingsTabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        playersTabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        playersTabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        titleText.Text = "🎯 Aimbot Settings"
+    else
+        settingsContent.Visible = false
+        playersContent.Visible = true
+        settingsTabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        settingsTabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        playersTabButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        playersTabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        titleText.Text = "👥 Player Selection"
+    end
+end
+
+settingsTabButton.MouseButton1Click:Connect(function()
+    switchTab("settings")
+end)
+
+playersTabButton.MouseButton1Click:Connect(function()
+    switchTab("players")
+end)
+
+-- Settings Tab Content
+-- Key Binding Section
+local keyLabel = Instance.new("TextLabel")
+keyLabel.Name = "KeyLabel"
+keyLabel.Size = UDim2.new(0.8, 0, 0, 25) -- Increased height
+keyLabel.Position = UDim2.new(0.1, 0, 0.03, 0) -- Adjusted position
+keyLabel.BackgroundTransparency = 1
+keyLabel.Text = "🔑 Trigger Key: " .. aimbotSettings.triggerKey.Name
+keyLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+keyLabel.TextScaled = true
+keyLabel.Font = Enum.Font.Gotham
+keyLabel.Parent = settingsContent
+
+local keyButton = Instance.new("TextButton")
+keyButton.Name = "KeyButton"
+keyButton.Size = UDim2.new(0.8, 0, 0, 35) -- Increased height
+keyButton.Position = UDim2.new(0.1, 0, 0.08, 0) -- Adjusted position
+keyButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+keyButton.BorderSizePixel = 0
+keyButton.Text = "Click to change key"
+keyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+keyButton.TextScaled = true
+keyButton.Font = Enum.Font.Gotham
+keyButton.Parent = settingsContent
+
+local keyCorner = Instance.new("UICorner")
+keyCorner.CornerRadius = UDim.new(0, 8)
+keyCorner.Parent = keyButton
+
+local waitingForKey = false
+
+keyButton.MouseButton1Click:Connect(function()
+    if not waitingForKey then
+        waitingForKey = true
+        keyButton.Text = "Press any key..."
+        keyButton.BackgroundColor3 = Color3.fromRGB(80, 120, 200)
+        
+        local connection
+        connection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            
+            if input.KeyCode ~= Enum.KeyCode.Unknown then
+                aimbotSettings.triggerKey = input.KeyCode
+                keyLabel.Text = "🔑 Trigger Key: " .. aimbotSettings.triggerKey.Name
+                keyButton.Text = "Click to change key"
+                keyButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                waitingForKey = false
+                connection:Disconnect()
+            end
+        end)
+    end
+end)
+
+-- FOV Slider with better design
+local fovLabel = Instance.new("TextLabel")
+fovLabel.Name = "FOVLabel"
+fovLabel.Size = UDim2.new(0.8, 0, 0, 25) -- Increased height
+fovLabel.Position = UDim2.new(0.1, 0, 0.18, 0) -- Adjusted position
+fovLabel.BackgroundTransparency = 1
+fovLabel.Text = "👁️ FOV: " .. aimbotSettings.fov
+fovLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+fovLabel.TextScaled = true
+fovLabel.Font = Enum.Font.Gotham
+fovLabel.Parent = settingsContent
+
+local fovSlider = Instance.new("Frame")
+fovSlider.Name = "FOVSlider"
+fovSlider.Size = UDim2.new(0.8, 0, 0, 10) -- Increased height
+fovSlider.Position = UDim2.new(0.1, 0, 0.25, 0) -- Adjusted position
+fovSlider.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+fovSlider.BorderSizePixel = 0
+fovSlider.Parent = settingsContent
+
+local fovSliderCorner = Instance.new("UICorner")
+fovSliderCorner.CornerRadius = UDim.new(0, 4)
+fovSliderCorner.Parent = fovSlider
+
+local fovFill = Instance.new("Frame")
+fovFill.Name = "FOVFill"
+fovFill.Size = UDim2.new(aimbotSettings.fov / 300, 0, 1, 0)
+fovFill.Position = UDim2.new(0, 0, 0, 0)
+fovFill.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+fovFill.BorderSizePixel = 0
+fovFill.Parent = fovSlider
+
+local fovFillCorner = Instance.new("UICorner")
+fovFillCorner.CornerRadius = UDim.new(0, 4)
+fovFillCorner.Parent = fovFill
+
+local fovButton = Instance.new("TextButton")
+fovButton.Name = "FOVButton"
+fovButton.Size = UDim2.new(0.8, 0, 0, 25) -- Increased height
+fovButton.Position = UDim2.new(0.1, 0, 0.25, -8) -- Adjusted position
+fovButton.BackgroundTransparency = 1
+fovButton.Text = ""
+fovButton.Parent = settingsContent
+
+fovButton.MouseButton1Down:Connect(function()
+    local connection
+    connection = UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mousePos = UserInputService:GetMouseLocation()
+            local sliderPos = fovSlider.AbsolutePosition.X
+            local sliderWidth = fovSlider.AbsoluteSize.X
+            local percentage = math.clamp((mousePos.X - sliderPos) / sliderWidth, 0, 1)
+            aimbotSettings.fov = math.floor(percentage * 300)
+            fovLabel.Text = "👁️ FOV: " .. aimbotSettings.fov
+            fovFill.Size = UDim2.new(percentage, 0, 1, 0)
+            updateFOVCircle() -- Update the FOV circle
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            connection:Disconnect()
+        end
+    end)
+end)
+
+-- Smoothness Slider with better design
+local smoothLabel = Instance.new("TextLabel")
+smoothLabel.Name = "SmoothLabel"
+smoothLabel.Size = UDim2.new(0.8, 0, 0, 25) -- Increased height
+smoothLabel.Position = UDim2.new(0.1, 0, 0.33, 0) -- Adjusted position
+smoothLabel.BackgroundTransparency = 1
+smoothLabel.Text = "🎯 Smoothness: " .. aimbotSettings.smoothness
+smoothLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+smoothLabel.TextScaled = true
+smoothLabel.Font = Enum.Font.Gotham
+smoothLabel.Parent = settingsContent
+
+local smoothSlider = Instance.new("Frame")
+smoothSlider.Name = "SmoothSlider"
+smoothSlider.Size = UDim2.new(0.8, 0, 0, 10) -- Increased height
+smoothSlider.Position = UDim2.new(0.1, 0, 0.40, 0) -- Adjusted position
+smoothSlider.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+smoothSlider.BorderSizePixel = 0
+smoothSlider.Parent = settingsContent
+
+local smoothSliderCorner = Instance.new("UICorner")
+smoothSliderCorner.CornerRadius = UDim.new(0, 4)
+smoothSliderCorner.Parent = smoothSlider
+
+local smoothFill = Instance.new("Frame")
+smoothFill.Name = "SmoothFill"
+smoothFill.Size = UDim2.new(aimbotSettings.smoothness / 10, 0, 1, 0)
+smoothFill.Position = UDim2.new(0, 0, 0, 0)
+smoothFill.BackgroundColor3 = Color3.fromRGB(255, 150, 100)
+smoothFill.BorderSizePixel = 0
+smoothFill.Parent = smoothSlider
+
+local smoothFillCorner = Instance.new("UICorner")
+smoothFillCorner.CornerRadius = UDim.new(0, 4)
+smoothFillCorner.Parent = smoothFill
+
+local smoothButton = Instance.new("TextButton")
+smoothButton.Name = "SmoothButton"
+smoothButton.Size = UDim2.new(0.8, 0, 0, 25) -- Increased height
+smoothButton.Position = UDim2.new(0.1, 0, 0.40, -8) -- Adjusted position
+smoothButton.BackgroundTransparency = 1
+smoothButton.Text = ""
+smoothButton.Parent = settingsContent
+
+smoothButton.MouseButton1Down:Connect(function()
+    local connection
+    connection = UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mousePos = UserInputService:GetMouseLocation()
+            local sliderPos = smoothSlider.AbsolutePosition.X
+            local sliderWidth = smoothSlider.AbsoluteSize.X
+            local percentage = math.clamp((mousePos.X - sliderPos) / sliderWidth, 0, 1)
+            aimbotSettings.smoothness = math.floor(percentage * 10) + 1
+            smoothLabel.Text = "🎯 Smoothness: " .. aimbotSettings.smoothness
+            smoothFill.Size = UDim2.new(percentage, 0, 1, 0)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            connection:Disconnect()
+        end
+    end)
+end)
+
+-- Aim Part Dropdown with better design
+local partLabel = Instance.new("TextLabel")
+partLabel.Name = "PartLabel"
+partLabel.Size = UDim2.new(0.8, 0, 0, 25) -- Increased height
+partLabel.Position = UDim2.new(0.1, 0, 0.48, 0) -- Adjusted position
+partLabel.BackgroundTransparency = 1
+partLabel.Text = "🎯 Aim Part: " .. aimbotSettings.aimPart
+partLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+partLabel.TextScaled = true
+partLabel.Font = Enum.Font.Gotham
+partLabel.Parent = settingsContent
+
+local partButton = Instance.new("TextButton")
+partButton.Name = "PartButton"
+partButton.Size = UDim2.new(0.8, 0, 0, 35) -- Increased height
+partButton.Position = UDim2.new(0.1, 0, 0.55, 0) -- Adjusted position
+partButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+partButton.BorderSizePixel = 0
+partButton.Text = aimbotSettings.aimPart
+partButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+partButton.TextScaled = true
+partButton.Font = Enum.Font.Gotham
+partButton.Parent = settingsContent
+
+local partCorner = Instance.new("UICorner")
+partCorner.CornerRadius = UDim.new(0, 8)
+partCorner.Parent = partButton
+
+local parts = {"Head", "Torso", "HumanoidRootPart"}
+local currentPartIndex = 1
+
+partButton.MouseButton1Click:Connect(function()
+    currentPartIndex = currentPartIndex % #parts + 1
+    aimbotSettings.aimPart = parts[currentPartIndex]
+    partButton.Text = aimbotSettings.aimPart
+    partLabel.Text = "🎯 Aim Part: " .. aimbotSettings.aimPart
+end)
+
+-- No Recoil Toggle Button
+local noRecoilButton = Instance.new("TextButton")
+noRecoilButton.Name = "NoRecoilButton"
+noRecoilButton.Size = UDim2.new(0.38, 0, 0, 35) -- Increased size
+noRecoilButton.Position = UDim2.new(0.05, 0, 0.65, 0) -- Adjusted position
+noRecoilButton.BackgroundColor3 = noRecoilEnabled and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(200, 100, 100)
+noRecoilButton.BorderSizePixel = 0
+noRecoilButton.Text = "🔫 No Recoil"
+noRecoilButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+noRecoilButton.TextScaled = true
+noRecoilButton.Font = Enum.Font.Gotham
+noRecoilButton.Parent = settingsContent
+
+local noRecoilCorner = Instance.new("UICorner")
+noRecoilCorner.CornerRadius = UDim.new(0, 8)
+noRecoilCorner.Parent = noRecoilButton
+
+noRecoilButton.MouseButton1Click:Connect(function()
+    noRecoilEnabled = not noRecoilEnabled
+    noRecoilButton.BackgroundColor3 = noRecoilEnabled and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(200, 100, 100)
+    
+    if noRecoilEnabled then
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "🔫 No Recoil",
+            Text = "No Recoil enabled! Perfect for Arsenal!",
+            Duration = 3,
+        })
+    else
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "🔫 No Recoil",
+            Text = "No Recoil disabled!",
+            Duration = 3,
+        })
+    end
+end)
+
+-- Toggle Buttons with better design
+local teamCheckButton = Instance.new("TextButton")
+teamCheckButton.Name = "TeamCheckButton"
+teamCheckButton.Size = UDim2.new(0.38, 0, 0, 35) -- Increased size
+teamCheckButton.Position = UDim2.new(0.57, 0, 0.65, 0) -- Adjusted position
+teamCheckButton.BackgroundColor3 = aimbotSettings.teamCheck and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(200, 100, 100)
+teamCheckButton.BorderSizePixel = 0
+teamCheckButton.Text = "👥 Team Check"
+teamCheckButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+teamCheckButton.TextScaled = true
+teamCheckButton.Font = Enum.Font.Gotham
+teamCheckButton.Parent = settingsContent
+
+local teamCorner = Instance.new("UICorner")
+teamCorner.CornerRadius = UDim.new(0, 8)
+teamCorner.Parent = teamCheckButton
+
+teamCheckButton.MouseButton1Click:Connect(function()
+    aimbotSettings.teamCheck = not aimbotSettings.teamCheck
+    teamCheckButton.BackgroundColor3 = aimbotSettings.teamCheck and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(200, 100, 100)
+end)
+
+local visibilityButton = Instance.new("TextButton")
+visibilityButton.Name = "VisibilityButton"
+visibilityButton.Size = UDim2.new(0.38, 0, 0, 35) -- Increased size
+visibilityButton.Position = UDim2.new(0.05, 0, 0.75, 0) -- Adjusted position
+visibilityButton.BackgroundColor3 = aimbotSettings.visibilityCheck and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(200, 100, 100)
+visibilityButton.BorderSizePixel = 0
+visibilityButton.Text = "👁️ Visibility"
+visibilityButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+visibilityButton.TextScaled = true
+visibilityButton.Font = Enum.Font.Gotham
+visibilityButton.Parent = settingsContent
+
+local visibilityCorner = Instance.new("UICorner")
+visibilityCorner.CornerRadius = UDim.new(0, 8)
+visibilityCorner.Parent = visibilityButton
+
+visibilityButton.MouseButton1Click:Connect(function()
+    aimbotSettings.visibilityCheck = not aimbotSettings.visibilityCheck
+    visibilityButton.BackgroundColor3 = aimbotSettings.visibilityCheck and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(200, 100, 100)
+end)
+
+-- Enable/Disable Button with better design
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(0.38, 0, 0, 35) -- Increased size
+toggleButton.Position = UDim2.new(0.57, 0, 0.75, 0) -- Adjusted position
+toggleButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+toggleButton.BorderSizePixel = 0
+toggleButton.Text = "❌ DISABLED"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextScaled = true
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.Parent = settingsContent
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 10)
+toggleCorner.Parent = toggleButton
+
+-- Add Anti-Cheat Bypass Button
+local bypassButton = Instance.new("TextButton")
+bypassButton.Name = "BypassButton"
+bypassButton.Size = UDim2.new(0.8, 0, 0, 35)
+bypassButton.Position = UDim2.new(0.1, 0, 0.85, 0)
+bypassButton.BackgroundColor3 = Color3.fromRGB(80, 60, 120)
+bypassButton.BorderSizePixel = 0
+bypassButton.Text = "🚫 Anti-Cheat Bypass  🛡️"
+bypassButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+bypassButton.TextScaled = true
+bypassButton.Font = Enum.Font.GothamBold
+bypassButton.Parent = settingsContent
+
+local bypassCorner = Instance.new("UICorner")
+bypassCorner.CornerRadius = UDim.new(0, 10)
+bypassCorner.Parent = bypassButton
+
+-- Add emoji icon (shield) to the button visually
+local emojiIcon = Instance.new("ImageLabel")
+emojiIcon.Name = "BypassEmoji"
+emojiIcon.Size = UDim2.new(0, 28, 0, 28)
+emojiIcon.Position = UDim2.new(0, 8, 0.5, -14)
+emojiIcon.BackgroundTransparency = 1
+emojiIcon.Image = "rbxassetid://7733960981" -- Shield emoji asset
+emojiIcon.Parent = bypassButton
+
+bypassButton.MouseButton1Click:Connect(function()
+    -- اجرای اسکریپت بایپس آنتی‌چیت
+    local success, err = pcall(function()
+        loadfile("luascripts/general/anticheat_bypass.lua")()
+    end)
+    if success then
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "Bypass",
+            Text = "Anti-Cheat Bypass اجرا شد!",
+            Duration = 4
+        })
+    else
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "Bypass Error",
+            Text = tostring(err),
+            Duration = 6
+        })
+    end
+end)
+
+-- Players Tab Content
+local playersLabel = Instance.new("TextLabel")
+playersLabel.Name = "PlayersLabel"
+playersLabel.Size = UDim2.new(1, 0, 0, 25)
+playersLabel.Position = UDim2.new(0, 0, 0, 0)
+playersLabel.BackgroundTransparency = 1
+playersLabel.Text = "👥 Select Players to Target:"
+playersLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+playersLabel.TextScaled = true
+playersLabel.Font = Enum.Font.GothamBold
+playersLabel.Parent = playersContent
+
+-- Player list container
+local playerListFrame = Instance.new("ScrollingFrame")
+playerListFrame.Name = "PlayerListFrame"
+playerListFrame.Size = UDim2.new(1, 0, 1, -35)
+playerListFrame.Position = UDim2.new(0, 0, 0, 30)
+playerListFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+playerListFrame.BorderSizePixel = 0
+playerListFrame.ScrollBarThickness = 6
+playerListFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
+playerListFrame.Parent = playersContent
+
+local playerListCorner = Instance.new("UICorner")
+playerListCorner.CornerRadius = UDim.new(0, 8)
+playerListCorner.Parent = playerListFrame
+
+-- Function to create player button
+local function createPlayerButton(player, index)
+    local playerButton = Instance.new("Frame")
+    playerButton.Name = player.Name .. "Button"
+    playerButton.Size = UDim2.new(1, -10, 0, 40)
+    playerButton.Position = UDim2.new(0, 5, 0, (index - 1) * 45)
+    playerButton.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    playerButton.BorderSizePixel = 0
+    playerButton.Parent = playerListFrame
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 6)
+    buttonCorner.Parent = playerButton
+    
+    local checkbox = Instance.new("TextButton")
+    checkbox.Name = "Checkbox"
+    checkbox.Size = UDim2.new(0, 20, 0, 20)
+    checkbox.Position = UDim2.new(0, 10, 0.5, -10)
+    checkbox.BackgroundColor3 = selectedPlayers[player] and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(60, 60, 80)
+    checkbox.BorderSizePixel = 0
+    checkbox.Text = ""
+    checkbox.Parent = playerButton
+    
+    local checkboxCorner = Instance.new("UICorner")
+    checkboxCorner.CornerRadius = UDim.new(0, 4)
+    checkboxCorner.Parent = checkbox
+    
+    local playerName = Instance.new("TextLabel")
+    playerName.Name = "PlayerName"
+    playerName.Size = UDim2.new(1, -50, 1, 0)
+    playerName.Position = UDim2.new(0, 40, 0, 0)
+    playerName.BackgroundTransparency = 1
+    playerName.Text = player.Name
+    playerName.TextColor3 = Color3.fromRGB(255, 255, 255)
+    playerName.TextScaled = true
+    playerName.Font = Enum.Font.Gotham
+    playerName.TextXAlignment = Enum.TextXAlignment.Left
+    playerName.Parent = playerButton
+    
+    -- Checkbox functionality
+    checkbox.MouseButton1Click:Connect(function()
+        if selectedPlayers[player] then
+            selectedPlayers[player] = nil
+            checkbox.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        else
+            selectedPlayers[player] = true
+            checkbox.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        end
+    end)
+    
+    return playerButton
+end
+
+-- Function to update player list
+local function updatePlayerList()
+    -- Clear existing buttons
+    for _, child in pairs(playerListFrame:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+    
+    -- Create buttons for each player
+    local index = 1
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            createPlayerButton(player, index)
+            index = index + 1
+        end
+    end
+    
+    -- Update canvas size
+    playerListFrame.CanvasSize = UDim2.new(0, 0, 0, (index - 1) * 45)
+end
+
+-- Function to preserve player selections when character respawns
+local function onCharacterAdded()
+    -- Wait a bit for the character to fully load
+    wait(1)
+    -- Update the player list to restore selections
+    updatePlayerList()
+end
+
+-- Connect character respawn events
+LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- Update player list when players join/leave
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(function(player)
+    -- Remove the player from selected players if they leave
+    selectedPlayers[player] = nil
+    updatePlayerList()
+end)
+
+-- Initial player list
+updatePlayerList()
+
+-- Functions
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            -- Check if player is selected (if any players are selected)
+            local isSelected = next(selectedPlayers) == nil or selectedPlayers[player]
+            
+            if isSelected then
+                -- Team check
+                if not (aimbotSettings.teamCheck and player.Team == LocalPlayer.Team) then
+                    local targetPart = player.Character:FindFirstChild(aimbotSettings.aimPart)
+                    if targetPart then
+                        -- FOV check
+                        local screenPoint = Camera:WorldToScreenPoint(targetPart.Position)
+                        local mousePos = UserInputService:GetMouseLocation()
+                        local distance = (Vector2.new(screenPoint.X, screenPoint.Y) - mousePos).Magnitude
+                        
+                        if distance <= aimbotSettings.fov then
+                            -- Visibility check
+                            if aimbotSettings.visibilityCheck then
+                                local ray = Ray.new(Camera.CFrame.Position, (targetPart.Position - Camera.CFrame.Position).Unit * 1000)
+                                local hit, _ = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character})
+                                if hit and hit:IsDescendantOf(player.Character) then
+                                    if distance < shortestDistance then
+                                        shortestDistance = distance
+                                        closestPlayer = player
+                                    end
+                                end
+                            else
+                                if distance < shortestDistance then
+                                    shortestDistance = distance
+                                    closestPlayer = player
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return closestPlayer
+end
+
+local function aimAtPlayer(player)
+    if not player or not player.Character then
+        return
+    end
+    
+    local targetPart = player.Character:FindFirstChild(aimbotSettings.aimPart)
+    if not targetPart then
+        return
+    end
+    
+    local targetPosition = targetPart.Position
+    local cameraPosition = Camera.CFrame.Position
+    local aimDirection = (targetPosition - cameraPosition).Unit
+    
+    local currentCFrame = Camera.CFrame
+    local targetCFrame = CFrame.new(cameraPosition, targetPosition)
+    
+    -- Apply smoothness
+    local newCFrame = currentCFrame:Lerp(targetCFrame, 1 / aimbotSettings.smoothness)
+    Camera.CFrame = newCFrame
+end
+
+-- Toggle button functionality
+toggleButton.MouseButton1Click:Connect(function()
+    aimbotEnabled = not aimbotEnabled
+    
+    if aimbotEnabled then
+        toggleButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+        toggleButton.Text = "✅ ENABLED"
+        fovCircle.Visible = true -- Show FOV circle when enabled
+        updateFOVCircle()
+        
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "🎯 Aimbot",
+            Text = "Aimbot enabled! Hold " .. aimbotSettings.triggerKey.Name .. " to aim",
+            Duration = 3,
+        })
+    else
+        toggleButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+        toggleButton.Text = "❌ DISABLED"
+        fovCircle.Visible = false -- Hide FOV circle when disabled
+        
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "🎯 Aimbot",
+            Text = "Aimbot disabled!",
+            Duration = 3,
+        })
+    end
+end)
+
+-- Main aimbot loop
+RunService.RenderStepped:Connect(function()
+    if not aimbotEnabled then
+        return
+    end
+    
+    if UserInputService:IsKeyDown(aimbotSettings.triggerKey) then
+        targetPlayer = getClosestPlayer()
+        if targetPlayer then
+            aimAtPlayer(targetPlayer)
+            -- Make circle more visible when aiming
+            circleImage.ImageTransparency = 0.3
+            stroke.Transparency = 0.1
+        else
+            -- Normal transparency when not aiming
+            circleImage.ImageTransparency = 0.8
+            stroke.Transparency = 0.3
+        end
+    else
+        targetPlayer = nil
+        -- Normal transparency when not holding trigger
+        circleImage.ImageTransparency = 0.8
+        stroke.Transparency = 0.3
+    end
+end)
+
+-- No Recoil loop
+RunService.RenderStepped:Connect(function()
+    if noRecoilEnabled then
+        removeRecoil()
+    end
+end)
+
+-- Close GUI with Escape key
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.Escape then
+        screenGui:Destroy()
+        fovCircleGui:Destroy() -- Also destroy FOV circle when closing GUI
+    end
+end)
 
 -- Notification
 game:GetService("StarterGui"):SetCore("SendNotification",{
-    Title = "CTRL click tp",
-    Text = "Hold Ctrl then press click to a place you want to teleport to.",
-    Duration = 6,
-})
+    Title = "🎯 Aimbot",
+    Text = "Aimbot GUI loaded! Hold " .. aimbotSettings.triggerKey.Name .. " to aim",
+    Duration = 5,
+}) 
 
--- Configuration
-local instant_teleport = true -- Set to true for instant teleport, false for tween
-local speed = 1000 -- Only used if instant_teleport is false
-local bodyvelocityenabled = true -- set this to false if you are getting kicked
-local auto_above = true -- Automatically teleport above objects when clicking underneath
+-- Add BulletTrack toggle to the GUI
+local bulletTrackEnabled = false
 
--- Services
-local Imput = game:GetService("UserInputService")
-local Plr = game.Players.LocalPlayer
-local Mouse = Plr:GetMouse()
+-- Add BulletTrack toggle button
+local bulletTrackToggle = Instance.new("TextButton")
+bulletTrackToggle.Name = "BulletTrackToggle"
+bulletTrackToggle.Size = UDim2.new(0.48, 0, 0, 35)
+bulletTrackToggle.Position = UDim2.new(0.02, 0, 0, 420)
+bulletTrackToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
+bulletTrackToggle.BorderSizePixel = 0
+bulletTrackToggle.Text = "🎯 BulletTrack: OFF"
+bulletTrackToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+bulletTrackToggle.TextScaled = true
+bulletTrackToggle.Font = Enum.Font.SourceSansBold
+bulletTrackToggle.Parent = frame
 
--- Function to get the top surface of an object
-function GetTopSurface(object, hitPoint)
-    if not object then return hitPoint end
-    
-    local size = object.Size
-    local cframe = object.CFrame
-    local topY = cframe.Y + (size.Y / 2)
-    
-    return Vector3.new(hitPoint.X, topY + 3, hitPoint.Z)
-end
+local bulletTrackCorner = Instance.new("UICorner")
+bulletTrackCorner.CornerRadius = UDim.new(0, 10)
+bulletTrackCorner.Parent = bulletTrackToggle
 
--- Function to find safe teleport position
-function FindSafePosition(hitPoint, hitObject)
-    if not auto_above then
-        return hitPoint
-    end
-    
-    -- If we clicked on an object, teleport to its top
-    if hitObject then
-        return GetTopSurface(hitObject, hitPoint)
-    end
-    
-    -- If we clicked in air, try to find ground below
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = {Plr.Character}
-    
-    -- Cast ray downward to find ground
-    local raycastResult = workspace:Raycast(hitPoint, Vector3.new(0, -1000, 0), raycastParams)
-    
-    if raycastResult then
-        -- Found ground, teleport above it
-        return raycastResult.Position + Vector3.new(0, 3, 0)
+bulletTrackToggle.MouseButton1Click:Connect(function()
+    bulletTrackEnabled = not bulletTrackEnabled
+    if bulletTrackEnabled then
+        bulletTrackToggle.BackgroundColor3 = Color3.fromRGB(0, 184, 148)
+        bulletTrackToggle.Text = "🎯 BulletTrack: ON"
     else
-        -- No ground found, use original position with some height
-        return hitPoint + Vector3.new(0, 5, 0)
+        bulletTrackToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 200)
+        bulletTrackToggle.Text = "🎯 BulletTrack: OFF"
     end
-end
+end)
 
--- Advanced function to detect if we're clicking underneath something
-function IsClickingUnderneath(hitPoint)
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = {Plr.Character}
-    
-    -- Cast multiple rays upward to detect objects above
-    for i = 1, 10 do
-        local rayStart = hitPoint + Vector3.new(0, i * 2, 0)
-        local raycastResult = workspace:Raycast(rayStart, Vector3.new(0, 50, 0), raycastParams)
-        
-        if raycastResult then
-            -- Found something above, return its top position
-            local object = raycastResult.Instance
-            local size = object.Size
-            local cframe = object.CFrame
-            local topY = cframe.Y + (size.Y / 2)
-            return Vector3.new(hitPoint.X, topY + 3, hitPoint.Z)
-        end
-    end
-    
-    return nil -- Nothing found above
-end
+-- Arsenal-specific BulletTrack (RemoteEvent hook)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
--- Teleport function
-function To(position)
-    local Chr = Plr.Character
-    if Chr ~= nil then
-        local hm = Chr.HumanoidRootPart
-        
-        -- Get the object we clicked on
-        local hitObject = Mouse.Target
-        local hitPoint = Mouse.Hit.p
-        
-        -- Find safe teleport position
-        local final_position = FindSafePosition(hitPoint, hitObject)
-        
-        -- Additional check for clicking underneath objects
-        if auto_above then
-            local underneathPosition = IsClickingUnderneath(hitPoint)
-            if underneathPosition then
-                final_position = underneathPosition
+local function getNearestEnemy()
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local nearest, minDist = nil, math.huge
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Team ~= LocalPlayer.Team and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+            local dist = (myRoot.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+            if dist < minDist then
+                minDist = dist
+                nearest = plr.Character.HumanoidRootPart
             end
         end
-        
-        if instant_teleport then
-            -- Instant teleport (fastest)
-            hm.CFrame = CFrame.new(final_position)
+    end
+    return nearest
+end
+
+-- Try to find Arsenal's shoot RemoteEvent
+local shootRemote = nil
+for _, v in pairs(ReplicatedStorage:GetDescendants()) do
+    if v:IsA("RemoteEvent") and (v.Name:lower():find("fire") or v.Name:lower():find("shoot") or v.Name:lower():find("hit")) then
+        shootRemote = v
+        break
+    end
+end
+
+if shootRemote and hookfunction then
+    local oldFireServer
+    oldFireServer = hookfunction(shootRemote.FireServer, function(self, ...)
+        if bulletTrackEnabled then
+            local args = {...}
+            local target = getNearestEnemy()
+            if target then
+                -- Try to find the Vector3 argument (target position)
+                for i, v in ipairs(args) do
+                    if typeof(v) == "Vector3" then
+                        args[i] = target.Position
+                        break
+                    end
+                end
+            end
+            return oldFireServer(self, unpack(args))
         else
-            -- Tween teleport (slower but smoother)
-            local ts = game:GetService("TweenService")
-            local dist = (hm.Position - final_position).magnitude
-            local tweenspeed = dist/tonumber(speed)
-            local ti = TweenInfo.new(tonumber(tweenspeed), Enum.EasingStyle.Linear)
-            local tp = {CFrame = CFrame.new(final_position)}
-            ts:Create(hm, ti, tp):Play()
-            
-            if bodyvelocityenabled == true then
-                local bv = Instance.new("BodyVelocity")
-                bv.Parent = hm
-                bv.MaxForce = Vector3.new(100000,100000,100000)
-                bv.Velocity = Vector3.new(0,0,0)
-                wait(tonumber(tweenspeed))
-                bv:Destroy()
-            end
+            return oldFireServer(self, ...)
+        end
+    end)
+end
+
+-- (Fallback) Old logic for physical bullets
+local Workspace = game:GetService("Workspace")
+Workspace.ChildAdded:Connect(function(child)
+    if not bulletTrackEnabled then return end
+    if child:IsA("BasePart") and (child.Name:lower():find("bullet") or child.Name:lower():find("projectile") or child.Name:lower():find("ray") or child.Name:lower():find("shell") or child.Name:lower():find("shot")) then
+        wait(0.01)
+        local target = getNearestEnemy()
+        if target then
+            local dir = (target.Position - child.Position).Unit
+            local speed = child.Velocity.Magnitude
+            child.CFrame = CFrame.new(child.Position, target.Position)
+            child.Velocity = dir * speed
         end
     end
-end
-
--- Input handler
-Imput.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and Imput:IsKeyDown(Enum.KeyCode.LeftControl) then
-        To(Mouse.Hit.p)
-    end
-end)
-
--- Continue with UI setup (rest of the UI elements)
--- Removed command functionalities and scripts, keeping only UI structure
-
--- Notification function
-function notify(TitleText, ContentText, Duration)
-    local NotificationClone = Notification:Clone()
-    NotificationClone.Visible = true
-    NotificationClone.Name = randomString()
-    NotificationClone.Title.Text = TitleText or "Notification"
-    NotificationClone.Text.Text = ContentText or "Content"
-    NotificationClone.Parent = ScaledHolder
-    NotificationClone:TweenPosition(UDim2.new(0.5, -150, 0, 20), "InOut", "Quart", 0.5, true, nil)
-    wait(Duration or 3)
-    NotificationClone:TweenPosition(UDim2.new(0.5, -150, 0, -100), "InOut", "Quart", 0.5, true, nil)
-    wait(0.5)
-    NotificationClone:Destroy()
-end
-
--- Minimize functionality
-local minimized = false
-function minimizeHolder()
-    if not minimized then
-        Holder:TweenSize(UDim2.new(0, 250, 0, 20), "InOut", "Quart", 0.5, true, nil)
-        MinimizedBar.Visible = true
-        minimized = true
-    end
-end
-function maximizeHolder()
-    if minimized then
-        Holder:TweenSize(UDim2.new(0, 250, 0, 220), "InOut", "Quart", 0.5, true, nil)
-        MinimizedBar.Visible = false
-        minimized = false
-    end
-end
-
--- Initial notification
-notify("Devon Loader", "UI loaded successfully. No scripts included.", 5)
-
--- Enable UI
-task.delay(0.1, function()
-    DevonLoader.Enabled = true
-end)
-
--- Intro animation
-task.spawn(function()
-    wait()
-    Credits:TweenPosition(UDim2.new(0, 0, 0.9, 0), "Out", "Quart", 0.2)
-    Logo:TweenSizeAndPosition(UDim2.new(0, 175, 0, 175), UDim2.new(0, 37, 0, 45), "Out", "Quart", 0.3)
-    wait(1)
-    local OutInfo = TweenInfo.new(1.6809, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, 0, false, 0)
-    TweenService:Create(Logo, OutInfo, {ImageTransparency = 1}):Play()
-    TweenService:Create(IntroBackground, OutInfo, {BackgroundTransparency = 1}):Play()
-    Credits:TweenPosition(UDim2.new(0, 0, 0.9, 30), "Out", "Quart", 0.2)
-    wait(0.2)
-    Logo:Destroy()
-    Credits:Destroy()
-    IntroBackground:Destroy()
-    minimizeHolder()
-    if IsOnMobile then notify("Unstable Device", "On mobile, Devon Loader may have issues or features that are not functioning correctly.") end
-end)
+end) 
