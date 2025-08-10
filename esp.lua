@@ -1,217 +1,158 @@
--- ESP (Extra Sensory Perception) functionality extracted from Infinite Yield FE v6.3.2
+-- ESP Script (Extra Sensory Perception)
+-- Shows players through walls with team colors
 
--- Required services
-local Players = cloneref(game:GetService("Players"))
-local RunService = cloneref(game:GetService("RunService"))
-local workspace = game:GetService("Workspace")
+-- Notification
+game:GetService("StarterGui"):SetCore("SendNotification",{
+    Title = "ESP",
+    Text = "ESP activated! Players are now visible through walls.",
+    Duration = 6,
+})
 
--- ESP variables
-local ESPObjects = {}
-local ESPEnabled = false
-local ESPTeam = false
-local ESPName = false
-local ESPBox = false
-local ESPTracer = false
-local ESPDistance = false
+-- Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
 
--- Utility function to generate random string (used for GUI element names)
-local function randomString()
-    local length = math.random(10, 20)
-    local array = {}
-    for i = 1, length do
-        array[i] = string.char(math.random(32, 126))
+-- ESP Configuration
+local espEnabled = true
+local espDistance = 1000
+local espThickness = 1
+local espTransparency = 0.5
+
+-- Function to get team color
+local function getTeamColor(player)
+    if LocalPlayer.Team and player.Team then
+        if LocalPlayer.Team == player.Team then
+            return Color3.fromRGB(0, 255, 0) -- Green for teammates
+        else
+            return Color3.fromRGB(255, 0, 0) -- Red for enemies
+        end
+    else
+        return Color3.fromRGB(255, 255, 255) -- White for no team
     end
-    return table.concat(array)
 end
 
--- Function to create ESP elements for a player's head
-function CreateESP(part)
-    local ESP = Instance.new("BillboardGui")
-    ESP.Name = randomString()
-    ESP.Parent = part
-    ESP.Adornee = part
-    ESP.Size = UDim2.new(0, 100, 0, 100)
-    ESP.StudsOffset = Vector3.new(0, part.Size.Y / 1.5 + 2, 0)
-    ESP.AlwaysOnTop = true
-    ESP.Enabled = false
-    
-    local Frame = Instance.new("Frame")
-    Frame.Parent = ESP
-    Frame.Size = UDim2.new(1, 0, 1, 0)
-    Frame.BackgroundTransparency = 1
-    
-    local Name = Instance.new("TextLabel")
-    Name.Name = "Name"
-    Name.Parent = Frame
-    Name.Size = UDim2.new(1, 0, 0, 30)
-    Name.BackgroundTransparency = 1
-    Name.TextColor3 = Color3.new(1, 1, 1)
-    Name.TextStrokeTransparency = 0
-    Name.TextStrokeColor3 = Color3.new(0, 0, 0)
-    Name.TextSize = 14
-    Name.Font = Enum.Font.SourceSans
-    Name.Text = part.Parent.Name
-    
-    local Distance = Instance.new("TextLabel")
-    Distance.Name = "Distance"
-    Distance.Parent = Frame
-    Distance.Position = UDim2.new(0, 0, 0, 30)
-    Distance.Size = UDim2.new(1, 0, 0, 30)
-    Distance.BackgroundTransparency = 1
-    Distance.TextColor3 = Color3.new(1, 1, 1)
-    Distance.TextStrokeTransparency = 0
-    Distance.TextStrokeColor3 = Color3.new(0, 0, 0)
-    Distance.TextSize = 14
-    Distance.Font = Enum.Font.SourceSans
-    Distance.Text = ""
-    
-    local Box = Instance.new("BoxHandleAdornment")
-    Box.Name = randomString()
-    Box.Parent = part
-    Box.Adornee = part
-    Box.Size = part.Size + Vector3.new(0.5, 0.5, 0.5)
-    Box.Color3 = Color3.new(1, 1, 1)
-    Box.Transparency = 0.5
-    Box.AlwaysOnTop = true
-    Box.Visible = false
-    Box.ZIndex = 10
-    
-    local Tracer = Instance.new("LineHandleAdornment")
-    Tracer.Name = randomString()
-    Tracer.Parent = part
-    Tracer.Adornee = part
-    Tracer.Length = 10
-    Tracer.Thickness = 1
-    Tracer.Color3 = Color3.new(1, 1, 1)
-    Tracer.Transparency = 0.5
-    Tracer.Visible = false
-    
-    ESPObjects[part.Parent] = {ESP = ESP, Box = Box, Tracer = Tracer}
-end
+-- ESP Storage
+local espObjects = {}
 
--- Function to manage ESP for a specific player
-function ESP(plr)
-    if plr.Character and plr ~= Players.LocalPlayer and plr.Character:FindFirstChild("Head") then
-        local Head = plr.Character:FindFirstChild("Head")
-        CreateESP(Head)
-        local ESP = ESPObjects[plr]
-        if ESP then
-            local Name = ESP.ESP:FindFirstChild("Frame"):FindFirstChild("Name")
-            local Distance = ESP.ESP:FindFirstChild("Frame"):FindFirstChild("Distance")
-            local Box = ESP.Box
-            local Tracer = ESP.Tracer
-            local update
-            update = RunService.RenderStepped:Connect(function()
-                if plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") then
-                    local vector, onScreen = workspace.CurrentCamera:WorldToViewportPoint(plr.Character:FindFirstChild("Head").Position)
-                    local teamCheck = ESPTeam and (Players.LocalPlayer.Team == plr.Team)
-                    ESP.ESP.Enabled = ESPEnabled and onScreen and not teamCheck
-                    Name.Visible = ESPName and ESPEnabled and onScreen and not teamCheck
-                    Distance.Visible = ESPDistance and ESPEnabled and onScreen and not teamCheck
-                    Box.Visible = ESPBox and ESPEnabled and onScreen and not teamCheck
-                    Tracer.Visible = ESPTracer and ESPEnabled and onScreen and not teamCheck
-                    if ESPDistance and onScreen then
-                        local dist = (Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("Head") and 
-                                     (Players.LocalPlayer.Character:FindFirstChild("Head").Position - plr.Character:FindFirstChild("Head").Position).magnitude) or 0
-                        Distance.Text = math.floor(dist + 0.5) .. " studs"
-                    end
-                    if Tracer.Visible then
-                        local screenPos = Vector2.new(workspace.CurrentCamera.ViewportSize.X / 2, workspace.CurrentCamera.ViewportSize.Y)
-                        local startPos = workspace.CurrentCamera:WorldToScreenPoint(plr.Character:FindFirstChild("Head").Position)
-                        local diff = screenPos - Vector2.new(startPos.X, startPos.Y)
-                        Tracer.Length = diff.Magnitude / 10
-                        Tracer.CFrame = CFrame.new(Vector3.new(0, 0, 0), Vector3.new(diff.X, diff.Y, 0))
-                    end
-                else
-                    ESP.ESP.Enabled = false
-                    Name.Visible = false
-                    Distance.Visible = false
-                    Box.Visible = false
-                    Tracer.Visible = false
-                end
-                if not plr.Parent then
-                    update:Disconnect()
-                    ESP.ESP:Destroy()
-                    ESP.Box:Destroy()
-                    ESP.Tracer:Destroy()
-                    ESPObjects[plr] = nil
-                end
-            end)
+-- Function to create ESP for a player
+local function createESP(player)
+    if player == LocalPlayer then return end
+    
+    -- Create ESP Box
+    local espBox = Drawing.new("Square")
+    espBox.Visible = false
+    espBox.Color = getTeamColor(player)
+    espBox.Thickness = espThickness
+    espBox.Transparency = espTransparency
+    espBox.Filled = false
+    
+    -- Create Name Tag
+    local nameTag = Drawing.new("Text")
+    nameTag.Visible = false
+    nameTag.Color = getTeamColor(player)
+    nameTag.Size = 20
+    nameTag.Center = true
+    nameTag.Outline = true
+    nameTag.Font = 2
+    
+    -- Create Distance Tag
+    local distanceTag = Drawing.new("Text")
+    distanceTag.Visible = false
+    distanceTag.Color = getTeamColor(player)
+    distanceTag.Size = 16
+    distanceTag.Center = true
+    distanceTag.Outline = true
+    distanceTag.Font = 2
+    
+    -- Store ESP objects
+    espObjects[player] = {
+        box = espBox,
+        name = nameTag,
+        distance = distanceTag
+    }
+    
+    -- Update function
+    local function updateESP()
+        if not espEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Head") then
+            espBox.Visible = false
+            nameTag.Visible = false
+            distanceTag.Visible = false
+            return
+        end
+        
+        local humanoidRootPart = player.Character.HumanoidRootPart
+        local head = player.Character.Head
+        
+        -- Check if player is on screen
+        local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position)
+        local rootPos, rootOnScreen = Camera:WorldToViewportPoint(humanoidRootPart.Position)
+        
+        if headOnScreen and rootOnScreen then
+            local distance = (LocalPlayer.Character.HumanoidRootPart.Position - humanoidRootPart.Position).Magnitude
+            
+            if distance <= espDistance then
+                -- Update colors based on team
+                local teamColor = getTeamColor(player)
+                espBox.Color = teamColor
+                nameTag.Color = teamColor
+                distanceTag.Color = teamColor
+                
+                -- Calculate ESP box
+                local topPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 3, 0))
+                local bottomPos = Camera:WorldToViewportPoint(humanoidRootPart.Position - Vector3.new(0, 3, 0))
+                
+                local boxSize = Vector2.new(math.abs(topPos.X - bottomPos.X), math.abs(topPos.Y - bottomPos.Y))
+                local boxPosition = Vector2.new(math.min(topPos.X, bottomPos.X), math.min(topPos.Y, bottomPos.Y))
+                
+                -- Update ESP box
+                espBox.Size = boxSize
+                espBox.Position = boxPosition
+                espBox.Visible = true
+                
+                -- Update name tag
+                nameTag.Position = Vector2.new(headPos.X, headPos.Y - 60)
+                nameTag.Text = player.Name
+                nameTag.Visible = true
+                
+                -- Update distance tag
+                distanceTag.Position = Vector2.new(headPos.X, headPos.Y - 40)
+                distanceTag.Text = math.floor(distance) .. "m"
+                distanceTag.Visible = true
+            else
+                espBox.Visible = false
+                nameTag.Visible = false
+                distanceTag.Visible = false
+            end
+        else
+            espBox.Visible = false
+            nameTag.Visible = false
+            distanceTag.Visible = false
         end
     end
+    
+    -- Connect update function
+    RunService.RenderStepped:Connect(updateESP)
 end
 
--- Notification function (minimal version for ESP feedback)
-local function notify(title, text)
-    print(string.format("%s: %s", title, text))
-    -- Note: Original script uses a GUI notification system, simplified here to console output
-end
-
--- Command definitions
-local function addcmd(name, aliases, func)
-    -- Simplified command handler (not using full Infinite Yield command system)
-    _G.commands = _G.commands or {}
-    _G.commands[name] = {NAME = name, ALIAS = aliases, FUNC = func}
-end
-
-addcmd('esp', {}, function(args, speaker)
-    ESPEnabled = true
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= Players.LocalPlayer then
-            ESP(plr)
-        end
-    end
-    notify("ESP", "Enabled")
-end)
-
-addcmd('unesp', {'noesp'}, function(args, speaker)
-    ESPEnabled = false
-    for _, ESP in pairs(ESPObjects) do
-        ESP.ESP.Enabled = false
-        ESP.ESP:FindFirstChild("Frame"):FindFirstChild("Name").Visible = false
-        ESP.ESP:FindFirstChild("Frame"):FindFirstChild("Distance").Visible = false
-        ESP.Box.Visible = false
-        ESP.Tracer.Visible = false
-    end
-    notify("ESP", "Disabled")
-end)
-
-addcmd('espteam', {'espteams'}, function(args, speaker)
-    ESPTeam = not ESPTeam
-    notify("ESP Team", ESPTeam and "Enabled" or "Disabled")
-end)
-
-addcmd('espname', {'espnames'}, function(args, speaker)
-    ESPName = not ESPName
-    notify("ESP Names", ESPName and "Enabled" or "Disabled")
-end)
-
-addcmd('espbox', {'espboxes'}, function(args, speaker)
-    ESPBox = not ESPBox
-    notify("ESP Boxes", ESPBox and "Enabled" or "Disabled")
-end)
-
-addcmd('esptracer', {'esptracers'}, function(args, speaker)
-    ESPTracer = not ESPTracer
-    notify("ESP Tracers", ESPTracer and "Enabled" or "Disabled")
-end)
-
-addcmd('espdistance', {}, function(args, speaker)
-    ESPDistance = not ESPDistance
-    notify("ESP Distance", ESPDistance and "Enabled" or "Disabled")
-end)
-
--- Hook for new players
-Players.PlayerAdded:Connect(function(plr)
-    if ESPEnabled then
-        repeat wait(1) until plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-        ESP(plr)
-    end
-end)
-
--- Initialize ESP for existing players
-for _, plr in pairs(Players:GetPlayers()) do
-    if plr ~= Players.LocalPlayer and ESPEnabled then
-        ESP(plr)
+-- Function to remove ESP for a player
+local function removeESP(player)
+    if espObjects[player] then
+        espObjects[player].box:Remove()
+        espObjects[player].name:Remove()
+        espObjects[player].distance:Remove()
+        espObjects[player] = nil
     end
 end
+
+-- Create ESP for existing players
+for _, player in pairs(Players:GetPlayers()) do
+    createESP(player)
+end
+
+-- Create ESP for new players
+Players.PlayerAdded:Connect(createESP)
+
+-- Remove ESP when players leave
+Players.PlayerRemoving:Connect(removeESP) 
