@@ -38,13 +38,67 @@ stroke.Parent = main
 
 -- Title
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 36)
+title.Size = UDim2.new(1, -40, 0, 36)
 title.BackgroundTransparency = 1
 title.Text = "🌌 RGB Menu 🌌"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 18
 title.Parent = main
+
+-- Minimize Button
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 32, 0, 32)
+minimizeBtn.Position = UDim2.new(1, -36, 0, 2)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+minimizeBtn.Text = "─"
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.TextSize = 16
+minimizeBtn.AutoButtonColor = false
+minimizeBtn.Parent = main
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minimizeBtn
+
+local minStroke = Instance.new("UIStroke")
+minStroke.Thickness = 1
+minStroke.Color = Color3.fromRGB(100, 100, 120)
+minStroke.Parent = minimizeBtn
+
+-- Minimize functionality
+local isMinimized = false
+local originalSize = main.Size
+local minimizedSize = UDim2.new(0, 420, 0, 42)
+
+minimizeBtn.MouseEnter:Connect(function()
+    TweenService:Create(minimizeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(80, 80, 100)}):Play()
+end)
+
+minimizeBtn.MouseLeave:Connect(function()
+    TweenService:Create(minimizeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 50, 60)}):Play()
+end)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    
+    if isMinimized then
+        -- Minimize
+        minimizeBtn.Text = "□"
+        container.Visible = false
+        TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = minimizedSize
+        }):Play()
+    else
+        -- Restore
+        minimizeBtn.Text = "─"
+        container.Visible = true
+        TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = originalSize
+        }):Play()
+    end
+end)
 
 -- Container (Scrollable list)
 local container = Instance.new("ScrollingFrame")
